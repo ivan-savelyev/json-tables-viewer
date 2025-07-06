@@ -14,7 +14,13 @@ export default function App() {
     },
     loading: false,
     loadingAll: false,
-    limit: 100
+    limit: 100,
+    offset: 0,
+    paramNames: {
+      limit: 'limit',
+      offset: 'offset'
+    },
+    showParamSettings: false
   }]);
   const [authToken, setAuthToken] = createSignal('');
   const [showAuthModal, setShowAuthModal] = createSignal(false);
@@ -33,7 +39,13 @@ export default function App() {
       },
       loading: false,
       loadingAll: false,
-      limit: 100
+      limit: 100,
+      offset: 0,
+      paramNames: {
+        limit: 'limit',
+        offset: 'offset'
+      },
+      showParamSettings: false
     }]);
     setActiveTab(newId);
   };
@@ -91,6 +103,33 @@ export default function App() {
     ));
   };
 
+  const updateTabOffset = (id, newOffset) => {
+    setTabs(tabs().map(tab => 
+      tab.id === id ? { ...tab, offset: newOffset } : tab
+    ));
+  };
+
+  const updateParamName = (id, param, newName) => {
+    setTabs(tabs().map(tab => 
+      tab.id === id ? { 
+        ...tab, 
+        paramNames: {
+          ...tab.paramNames,
+          [param]: newName
+        }
+      } : tab
+    ));
+  };
+
+  const toggleParamSettings = (id) => {
+    setTabs(tabs().map(tab => 
+      tab.id === id ? { 
+        ...tab, 
+        showParamSettings: !tab.showParamSettings 
+      } : tab
+    ));
+  };
+
   const loadData = async (tab, loadAll = false) => {
     try {
       setTabs(tabs().map(t => 
@@ -98,14 +137,14 @@ export default function App() {
       ));
 
       let allData = [];
-      let offset = 0;
+      let offset = tab.offset;
       let hasMore = true;
       let currentMeta = {};
 
-      while (hasMore && (loadAll || offset === 0)) {
+      while (hasMore && (loadAll || offset === tab.offset)) {
         const urlObj = new URL(tab.url, window.location.origin);
-        urlObj.searchParams.set('offset', offset);
-        urlObj.searchParams.set('limit', tab.limit);
+        urlObj.searchParams.set(tab.paramNames.offset, offset);
+        urlObj.searchParams.set(tab.paramNames.limit, tab.limit);
 
         const response = await fetch(urlObj.toString(), {
           headers: {
@@ -161,7 +200,6 @@ export default function App() {
         if (header === '№') return index + 1;
         const value = row[header];
         if (value === undefined || value === null) return '';
-        // Escape quotes and wrap in quotes if contains comma or newline
         const escaped = String(value).replace(/"/g, '""');
         return /[,"\n]/.test(escaped) ? `"${escaped}"` : escaped;
       });
@@ -223,13 +261,52 @@ export default function App() {
                   placeholder="Enter JSON URL"
                   style={{ "flex-grow": 1 }}
                 />
-                <input
-                  type="number"
-                  value={tab.limit}
-                  onInput={(e) => updateTabLimit(tab.id, parseInt(e.target.value) || 100)}
-                  placeholder="Limit"
-                  style={{ width: '80px' }}
-                />
+                <button 
+                  onClick={() => toggleParamSettings(tab.id)}
+                  style={{ marginRight: '8px' }}
+                >
+                  ⚙️
+                </button>
+              </div>
+
+              {tab.showParamSettings && (
+                <div class="param-settings" style={{ margin: '10px 0', padding: '10px', background: '#f0f0f0' }}>
+                  <div class="field-row">
+                    <label>Limit param name:</label>
+                    <input
+                      type="text"
+                      value={tab.paramNames.limit}
+                      onInput={(e) => updateParamName(tab.id, 'limit', e.target.value)}
+                      style={{ width: '100px' }}
+                    />
+                    <label>Value:</label>
+                    <input
+                      type="number"
+                      value={tab.limit}
+                      onInput={(e) => updateTabLimit(tab.id, parseInt(e.target.value) || 100)}
+                      style={{ width: '80px' }}
+                    />
+                  </div>
+                  <div class="field-row">
+                    <label>Offset param name:</label>
+                    <input
+                      type="text"
+                      value={tab.paramNames.offset}
+                      onInput={(e) => updateParamName(tab.id, 'offset', e.target.value)}
+                      style={{ width: '100px' }}
+                    />
+                    <label>Value:</label>
+                    <input
+                      type="number"
+                      value={tab.offset}
+                      onInput={(e) => updateTabOffset(tab.id, parseInt(e.target.value) || 0)}
+                      style={{ width: '80px' }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div class="field-row" style={{ margin: '10px 0' }}>
                 <button 
                   onClick={() => loadData(tab, false)}
                   disabled={!authToken() || tab.loading || tab.loadingAll}
