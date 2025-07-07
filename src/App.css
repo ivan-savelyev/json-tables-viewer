@@ -161,7 +161,7 @@ thead {
   position: sticky;
   top: 0;
   z-index: 10;
-  background-color: #c0c0c0; /* Цвет фона заголовков */
+  background-color: #f0e4d0; /* Цвет фона заголовков */
 }
 
 th::after {
@@ -203,6 +203,7 @@ th {
   cursor: move;
   user-select: none;
   transition: background 0.2s;
+  background-color: #f0e4d0;
 }
 
 th button {
