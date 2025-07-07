@@ -137,17 +137,58 @@ html, body {
   width: 80px;
 }
 
+.table-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: none; /* Убираем внешнюю границу */
+  background: transparent; /* Убираем белый фон */
+  overflow: hidden;
+}
+
 .table-wrapper {
   overflow: auto;
+  position: relative;
   width: 100%;
-  max-height: calc(100vh - 250px);
-  border: 1px solid #808080;
+  flex-grow: 1;
+  max-height: calc(100vh - 300px);
+  border: 1px solid #808080; /* Добавляем границу только для таблицы */
+  border-bottom: none; /* Убираем нижнюю границу */
+  background: white; /* Белый фон только для таблицы */
+}
+
+thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #c0c0c0; /* Цвет фона заголовков */
+}
+
+th::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background-color: #808080;
 }
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   background: white;
+}
+
+/* Стиль для нечетных строк */
+tr:nth-child(odd) {
+  background-color: #ffffff;
+}
+
+/* Стиль для четных строк */
+tr:nth-child(even) {
+  background-color: #cccccb;
 }
 
 th, td {
@@ -158,39 +199,73 @@ th, td {
 }
 
 th {
-  background: #c0c0c0;
-  position: sticky;
-  top: 0;
+  position: relative;
+  cursor: move;
+  user-select: none;
+  transition: background 0.2s;
+}
+
+th button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 4px;
+  margin-left: 4px;
+}
+
+th button:hover {
+  color: red;
+}
+
+th.dragging {
+  opacity: 0.5;
+  background: #a0a0a0;
+  border: 1px dashed #000 !important;
+}
+
+th.drop-target {
+  background: #e0e0e0;
+  border-left: 2px solid #000080 !important;
+  border-right: 2px solid #000080 !important;
+}
+
+th:hover {
+  background: #a0a0a0;
 }
 
 .meta-info {
-  margin-top: 20px;
-  padding: 10px;
+  padding: 6px 8px;
   background-color: #f0f0f0;
-  border: 1px solid #808080;
+  border: 1px solid #808080; /* Граница вокруг мета-информации */
+  font-size: 11px;
+  flex-shrink: 0;
 }
 
 .meta-info h3 {
-  margin-top: 0;
+  margin: 0 0 4px 0;
+  font-size: 11px;
+  font-weight: bold;
   color: #000080;
 }
 
-.meta-table {
-  width: 100%;
-  margin-top: 8px;
-  background-color: white;
+.meta-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .meta-key {
   font-weight: bold;
-  width: 30%;
-  padding: 4px 8px;
-  border: 1px solid #ddd;
+  color: #000080;
 }
 
 .meta-value {
-  padding: 4px 8px;
-  border: 1px solid #ddd;
   word-break: break-all;
 }
 

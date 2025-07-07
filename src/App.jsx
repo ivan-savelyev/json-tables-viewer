@@ -1,5 +1,6 @@
 import { createSignal } from 'solid-js';
 import AuthModal from './AuthModal';
+import { exportToCSV, flattenObject } from './csvExporter';
 
 export default function App() {
   const [activeTab, setActiveTab] = createSignal(0);
@@ -20,11 +21,106 @@ export default function App() {
       limit: 'limit',
       offset: 'offset'
     },
-    showParamSettings: false
+    showParamSettings: false,
+    columnSettings: {
+      visible: {},
+      order: []
+    }
   }]);
   const [authToken, setAuthToken] = createSignal('');
   const [showAuthModal, setShowAuthModal] = createSignal(false);
   const [authUrl, setAuthUrl] = createSignal('http://acm.testacm.cas.local/api/v1/api-token-auth/');
+
+  // Функция для переключения видимости колонки
+const toggleColumnVisibility = (tabId, columnName) => {
+  // Запрещаем скрывать заголовок "№"
+  if (columnName === '№') return;
+  
+  setTabs(tabs().map(tab => {
+    if (tab.id === tabId) {
+      const newVisible = {
+        ...tab.columnSettings.visible,
+        [columnName]: !tab.columnSettings.visible[columnName]
+      };
+      return {
+        ...tab,
+        columnSettings: {
+          ...tab.columnSettings,
+          visible: newVisible
+        }
+      };
+    }
+    return tab;
+  }));
+};
+
+const [draggedIndex, setDraggedIndex] = createSignal(null);
+const [dropTargetIndex, setDropTargetIndex] = createSignal(null);
+
+  // Функция для перемещения колонки
+const moveColumn = (tabId, dragIndex, hoverIndex) => {
+  setTabs(tabs().map(tab => {
+    if (tab.id === tabId) {
+      const newOrder = [...tab.columnSettings.order];
+      const visibleColumns = newOrder.filter(col => tab.columnSettings.visible[col] !== false);
+      
+      // Получаем фактические имена колонок для перемещения
+      const dragColumn = visibleColumns[dragIndex];
+      const hoverColumn = visibleColumns[hoverIndex];
+      
+      // Находим их позиции в полном списке
+      const dragPos = newOrder.indexOf(dragColumn);
+      const hoverPos = newOrder.indexOf(hoverColumn);
+      
+      // Удаляем и вставляем в новую позицию
+      newOrder.splice(dragPos, 1);
+      newOrder.splice(hoverPos, 0, dragColumn);
+      
+      return {
+        ...tab,
+        columnSettings: {
+          ...tab.columnSettings,
+          order: newOrder
+        }
+      };
+    }
+    return tab;
+  }));
+};
+
+const DraggableColumnHeader = ({ column, index, tab, onDragStart, onDragOver, onDrop, onDragEnd, isDragging, isDropTarget }) => {
+  return (
+    <th
+      draggable
+      classList={{
+        dragging: isDragging,
+        'drop-target': isDropTarget
+      }}
+      onDragStart={(e) => onDragStart(e, index)}
+      onDragOver={(e) => onDragOver(e, index)}
+      onDrop={(e) => onDrop(e, index)}
+      onDragEnd={onDragEnd}
+    >
+      {column}
+<button 
+  onClick={(e) => {
+    e.stopPropagation();
+    // Запрещаем скрывать заголовок "№"
+    if (column !== '№') {
+      toggleColumnVisibility(tab.id, column);
+    }
+  }}
+  style={{ 
+    marginLeft: '5px', 
+    fontSize: '10px',
+    visibility: column === '№' ? 'hidden' : 'visible' // Скрываем кнопку для "№"
+  }}
+>
+  ×
+</button>
+    </th>
+  );
+};
 
   const addTab = () => {
     const newId = tabs().length > 0 ? Math.max(...tabs().map(t => t.id)) + 1 : 0;
@@ -45,7 +141,11 @@ export default function App() {
         limit: 'limit',
         offset: 'offset'
       },
-      showParamSettings: false
+      showParamSettings: false,
+      columnSettings: {
+        visible: {},
+        order: []
+      }
     }]);
     setActiveTab(newId);
   };
@@ -64,32 +164,50 @@ export default function App() {
     setShowAuthModal(false);
   };
 
+
   const getAllColumns = (data) => {
     const columns = new Set(['№']);
+    
     data.forEach(row => {
-      Object.keys(row).forEach(key => columns.add(key));
+      const flatRow = flattenObject(row);
+      Object.keys(flatRow).forEach(key => columns.add(key));
     });
+    
     return Array.from(columns);
   };
 
-  const updateTabData = (id, newData, append = false) => {
-    setTabs(tabs().map(tab => {
-      if (tab.id === id) {
-        const combinedData = append ? [...tab.data.data, ...newData.data] : newData.data;
-        return {
-          ...tab,
-          data: {
-            data: combinedData,
-            meta: { ...tab.data.meta, ...newData.meta },
-            allColumns: getAllColumns(combinedData)
-          },
-          loading: false,
-          loadingAll: false
-        };
-      }
-      return tab;
-    }));
-  };
+const updateTabData = (id, newData, append = false) => {
+  setTabs(tabs().map(tab => {
+    if (tab.id === id) {
+      const combinedData = append ? [...tab.data.data, ...newData.data] : newData.data;
+      const flattenedData = combinedData.map(row => flattenObject(row));
+      const allColumns = getAllColumns(flattenedData);
+      const currentVisible = tab.columnSettings?.visible || {};
+      
+      const newVisible = {};
+      allColumns.forEach(col => {
+        // Заголовок "№" всегда видим
+        newVisible[col] = col === '№' ? true : (currentVisible[col] !== false);
+      });
+
+      return {
+        ...tab,
+        data: {
+          data: combinedData,
+          meta: { ...tab.data.meta, ...newData.meta },
+          allColumns: allColumns
+        },
+        columnSettings: {
+          visible: newVisible,
+          order: allColumns.filter(c => c !== '№')
+        },
+        loading: false,
+        loadingAll: false
+      };
+    }
+    return tab;
+  }));
+};
 
   const updateTabUrl = (id, newUrl) => {
     setTabs(tabs().map(tab => 
@@ -182,40 +300,11 @@ export default function App() {
     }
   };
 
-  const exportToCSV = (tab) => {
-    if (!tab.data.data || tab.data.data.length === 0) {
-      alert('No data to export');
-      return;
-    }
-
-    const headers = tab.data.allColumns;
-    const csvRows = [];
-
-    // Add headers
-    csvRows.push(headers.join(','));
-
-    // Add data rows
-    tab.data.data.forEach((row, index) => {
-      const values = headers.map(header => {
-        if (header === '№') return index + 1;
-        const value = row[header];
-        if (value === undefined || value === null) return '';
-        const escaped = String(value).replace(/"/g, '""');
-        return /[,"\n]/.test(escaped) ? `"${escaped}"` : escaped;
-      });
-      csvRows.push(values.join(','));
-    });
-
-    const csvContent = csvRows.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `data_${tab.title}_${new Date().toISOString().slice(0,10)}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const getNestedValue = (obj, path) => {
+    return path.split('.').reduce((acc, part) => {
+      if (acc === null || acc === undefined) return undefined;
+      return acc[part];
+    }, obj);
   };
 
   return (
@@ -248,11 +337,11 @@ export default function App() {
             <button class="tab-button" onClick={addTab}>+</button>
           </div>
 
-          {tabs().map(tab => (
-            <div 
-              class="tab-content" 
-              style={{ display: activeTab() === tab.id ? 'block' : 'none' }}
-            >
+      {tabs().map(tab => (
+        <div 
+          class="tab-content" 
+          style={{ display: activeTab() === tab.id ? 'block' : 'none' }}
+        >
               <div class="field-row" style={{ margin: '10px 0' }}>
                 <input
                   type="text"
@@ -320,75 +409,128 @@ export default function App() {
                 >
                   {tab.loadingAll ? 'Loading All...' : 'Load All'}
                 </button>
-                <button 
-                  onClick={() => exportToCSV(tab)}
-                  disabled={tab.data.data.length === 0}
-                  style={{ marginLeft: '8px' }}
-                >
-                  Export CSV
-                </button>
+<button 
+  onClick={() => {
+    try {
+      exportToCSV(tab);
+    } catch (err) {
+      alert(err.message);
+    }
+  }}
+  disabled={tab.data.data.length === 0}
+  style={{ marginLeft: '8px' }}
+>
+  Export CSV
+</button>
               </div>
 
-              <div class="table-wrapper">
-                {tab.data.data?.length > 0 ? (
-                  <>
-                    <table>
-                      <thead>
-                        <tr>
-                          {tab.data.allColumns.map(column => (
-                            <th key={column}>{column}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tab.data.data.map((row, i) => (
-                          <tr key={i}>
-                            {tab.data.allColumns.map(column => {
-                              if (column === '№') {
-                                return <td key={column}>{i + 1}</td>;
-                              }
-                              const value = row[column];
-                              return (
-                                <td key={`${i}-${column}`}>
-                                  {value === undefined || value === null 
-                                    ? '' 
-                                    : typeof value === 'object' 
-                                      ? JSON.stringify(value) 
-                                      : value}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-
-                    <div class="meta-info">
-                      <h3>Meta Information</h3>
-                      <table class="meta-table">
-                        <tbody>
-                          <tr>
-                            <td class="meta-key">Total Rows:</td>
-                            <td class="meta-value">{tab.data.data.length}</td>
-                          </tr>
-                          {Object.entries(tab.data.meta).map(([key, value]) => (
-                            <tr key={key}>
-                              <td class="meta-key">{key}:</td>
-                              <td class="meta-value">
-                                {typeof value === 'object' ? JSON.stringify(value) : value}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                ) : (
-                  <div class="no-data">No data available</div>
-                )}
-              </div>
-            </div>
+          <div class="table-container">
+            <div class="table-wrapper">
+              {tab.data.data?.length > 0 ? (
+<table>
+  <thead>
+    <tr>
+      <th>№</th>
+      {tab.columnSettings.order
+        .filter(col => tab.columnSettings.visible[col] !== false)
+        .map((column, colIndex) => (
+          <DraggableColumnHeader
+            key={`${tab.id}-${column}`}
+            column={column}
+            index={colIndex}
+            tab={tab}
+            isDragging={draggedIndex() === colIndex}
+            isDropTarget={dropTargetIndex() === colIndex}
+onDragStart={(e, index) => {
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", index.toString());
+  setDraggedIndex(index);
+}}
+onDragOver={(e, index) => {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  if (draggedIndex() !== null && draggedIndex() !== index) {
+    setDropTargetIndex(index);
+  }
+}}
+            onDrop={(e, index) => {
+              e.preventDefault();
+              const dragIndex = parseInt(e.dataTransfer.getData("text/plain"));
+              if (dragIndex !== index) {
+                moveColumn(tab.id, dragIndex, index);
+              }
+              setDropTargetIndex(null);
+            }}
+onDragEnd={() => {
+  setDraggedIndex(null);
+  setDropTargetIndex(null);
+}}
+          />
+        ))}
+    </tr>
+  </thead>
+  <tbody>
+    {tab.data.data.map((row, i) => (
+      <tr key={i}>
+        <td>{i + 1}</td>
+        {tab.columnSettings.order
+          .filter(col => tab.columnSettings.visible[col] !== false)
+          .map(column => (
+            <td key={`${i}-${column}`}>
+              {getNestedValue(row, column) ?? ''}
+            </td>
           ))}
+      </tr>
+    ))}
+  </tbody>
+</table>
+              ) : (
+                <div class="no-data">No data available</div>
+              )}
+            </div>
+            
+            <div style={{ margin: '10px 0' }}>
+              <button onClick={() => {
+                const allColumns = tab.data.allColumns.filter(c => c !== '№');
+                setTabs(tabs().map(t => {
+                  if (t.id === tab.id) {
+                    return {
+                      ...t,
+                      columnSettings: {
+                        visible: Object.fromEntries(allColumns.map(c => [c, true])),
+                        order: [...allColumns]
+                      }
+                    };
+                  }
+                  return t;
+                }));
+              }}>
+                Reset Columns
+              </button>
+            </div>
+
+            {tab.data.data?.length > 0 && (
+              <div class="meta-info">
+                <h3>Meta Information</h3>
+                <div class="meta-content">
+                  <div class="meta-row">
+                    <span class="meta-key">Total Rows:</span>
+                    <span class="meta-value">{tab.data.data.length}</span>
+                  </div>
+                  {Object.entries(tab.data.meta).map(([key, value]) => (
+                    <div class="meta-row" key={key}>
+                      <span class="meta-key">{key}:</span>
+                      <span class="meta-value">
+                        {typeof value === 'object' ? JSON.stringify(value) : value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
 
           {showAuthModal() && (
             <AuthModal
